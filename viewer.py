@@ -26,15 +26,17 @@ class StraceObj:
         self.lines = []
         self.pid_dict = {}
         self.instance = None
+        self.max_line_len = 0
         with open(self.file_path, 'r') as f:
             file_len = len(f.readlines())
-            self.instance = CursesStrace(file_len)
+        self.instance = CursesStrace(file_len, self)
         self.parse_file()
 
     
     def parse_file(self):
         with open(self.file_path, 'r') as f:
             for i, line in enumerate(f):
+                self.max_line_len = len(line) if self.max_line_len < len(line) else self.max_line_len
                 pid = re.search(self.pid_regex, line).group(0)
                 if pid not in self.pid_dict:
                     self.pid_dict[pid] = curses.color_pair(random.randint(2, 7))
@@ -44,18 +46,14 @@ class StraceObj:
     def run(self):
         while True:
             c = self.instance.screen.getch()
-            if c == curses.KEY_LEFT:
-                self.instance.hscroll(Dir.LEFT)
+            if c == curses.KEY_LEFT or c == ord('h'):
                 self.instance.cursor_update(Dir.LEFT)
-            elif c == curses.KEY_RIGHT:
-                self.instance.hscroll(Dir.RIGHT)
+            elif c == curses.KEY_RIGHT or c == ord('l'):
                 self.instance.cursor_update(Dir.RIGHT)
-            elif c == curses.KEY_UP:
-                self.instance.vscroll(Dir.UP, *self.lines[self.instance.doc_pos])
+            elif c == curses.KEY_UP or c == ord('k'):
                 self.instance.cursor_update(Dir.UP)
-            elif c == curses.KEY_DOWN:
+            elif c == curses.KEY_DOWN or c == ord('j'):
                 #moved = self.instance.scroll(4)
-                self.instance.vscroll(Dir.DOWN, *self.lines[self.instance.doc_pos])
                 self.instance.cursor_update(Dir.DOWN)
             elif c == ord('q'):
                 break
@@ -65,7 +63,7 @@ class StraceObj:
 
 class CursesStrace:
 
-    def __init__(self, file_len):
+    def __init__(self, file_len, straceobj):
         self.screen = curses.initscr()
         curses.cbreak()
         curses.noecho()
@@ -74,13 +72,14 @@ class CursesStrace:
         self.screen.refresh()
         self.init_colors()
 
+        self.strace_obj = straceobj
         self.file_len = file_len
         self.height, self.width = self.screen.getmaxyx()
         self.main_window_line = 1
         self.width_bound = int(self.width*0.75)
         self.hscroll_pos = 0
         self.vscroll_pos = 0
-        self.cursor_x, self.cursor_y = 0, 0
+        self.cursor_x, self.cursor_y = 1, 1
         self.max_hscroll = self.width_bound
         self.max_vscroll = self.height
         self.doc_pos = self.height - 1
@@ -103,18 +102,22 @@ class CursesStrace:
         if dir == Dir.LEFT:
             if self.cursor_x > 0:
                 self.cursor_x -= 1
+                self.hscroll(Dir.LEFT)
 
         elif dir == Dir.RIGHT:
             if self.cursor_x < self.width_bound:
                 self.cursor_x += 1
+                self.hscroll(Dir.RIGHT)
 
         elif dir == Dir.UP:
-            if self.cursor_y > 0:
+            if self.cursor_y > 1:
                 self.cursor_y -= 1
+                self.vscroll(Dir.UP, *self.strace_obj.lines[self.doc_pos - self.height])
 
         elif dir == Dir.DOWN:
             if self.cursor_y < self.height:
                 self.cursor_y += 1
+                self.vscroll(Dir.DOWN, *self.strace_obj.lines[self.doc_pos])
         self.main_win.move(self.cursor_y, self.cursor_x)
 
 
